@@ -90,7 +90,7 @@ class FemTools(QtCore.QRunnable, QtCore.QObject):
         # [{'Object':force_constraints, 'NodeLoad':value}, {}, ...
         # [{'Object':pressure_constraints, 'xxxxxxxx':value}, {}, ...]
         self.mesh = None
-        self.material = []
+        self.materials = []
         self.fixed_constraints = []
         self.force_constraints = []
         self.pressure_constraints = []
@@ -101,7 +101,7 @@ class FemTools(QtCore.QRunnable, QtCore.QObject):
             elif m.isDerivedFrom("App::MaterialObjectPython"):
                 material_dict = {}
                 material_dict['Object'] = m
-                self.material.append(material_dict)
+                self.materials.append(material_dict)
             elif m.isDerivedFrom("Fem::ConstraintFixed"):
                 fixed_constraint_dict = {}
                 fixed_constraint_dict['Object'] = m
@@ -121,8 +121,20 @@ class FemTools(QtCore.QRunnable, QtCore.QObject):
             message += "No active Analysis\n"
         if not self.mesh:
             message += "No mesh object in the Analysis\n"
-        if not self.material:
+        if not self.materials:
             message += "No material object in the Analysis\n"
+        else:
+            remaining_material = False
+            for mo in self.materials:
+                if mo['Object'].MaterialShapes == 'all' and len(self.materials) > 1:
+                    message += "If MaterialShapes of a material is set to 'all' only one material is allowed\n"
+                elif mo['Object'].MaterialShapes == 'remaining' and remaining_material == False:
+                    remaining_material = True
+                    continue # jump to next m in materials
+                elif mo['Object'].MaterialShapes == 'remaining' and remaining_material == True:
+                    message += "MaterialShapes is set to 'remaining' for mor than one materia\nl"
+                elif mo['Object'].MaterialShapes == 'referenced' and len(mo['Object'].Reference) == 0:
+                    message +=  "At least one material has an empty reference list\n"
         if not self.fixed_constraints:
             message += "No fixed-constraint nodes defined in the Analysis\n"
         if not (self.force_constraints or self.pressure_constraints):
@@ -134,7 +146,7 @@ class FemTools(QtCore.QRunnable, QtCore.QObject):
         import sys
         self.base_name = ""
         try:
-            inp_writer = iw.inp_writer(self.analysis, self.mesh, self.material,
+            inp_writer = iw.inp_writer(self.analysis, self.mesh, self.materials,
                                        self.fixed_constraints, self.force_constraints,
                                        self.pressure_constraints, self.working_dir)
             self.base_name = inp_writer.write_calculix_input_file()

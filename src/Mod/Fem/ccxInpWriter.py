@@ -41,20 +41,74 @@ class inp_writer:
         return self.base_name
 
     def write_material_element_sets(self, f):
+
+        def getElementsByNodes(elementtable, n):
+            '''e: elementlist
+               n: nodelist, elementtable '''
+            e = []  # elementlist
+            for elementID in sorted(elementtable):
+                  nodecount  = 0
+                  for nodeID in elementtable[elementID]:
+                    if nodeID in n:
+                      nodecount = nodecount + 1
+                  if nodecount == len(elementtable[elementID]):   # all nodes of the element are inside the solid!
+                    e.append(elementID)
+            return e
+
+        elementtable = {}
+        vol = self.mesh_object.FemMesh.Volumes
+        for i in vol:
+             elementtable[i] = self.mesh_object.FemMesh.getElementNodes(i)
+
         f.write('\n***********************************************************\n')
         f.write('** Element sets for materials\n')
         f.write('** written by {} function\n'.format(sys._getframe().f_code.co_name))
+        remaining_material_obj = None
+        all_material = False
+        e_count = 0
+        e_referenced = []
+        e_not_referenced = []
         for m in self.material_objects:
             mat_obj = m['Object']
             mat_obj_name = mat_obj.Name
             mat_name = mat_obj.Material['Name'][:80]
-
-            f.write('*ELSET,ELSET=' + mat_obj_name + '\n')
-            if len(self.material_objects) == 1:
+            # print mat_obj_name, ':  ', mat_name, ':  ', mat_obj.MaterialShapes 
+            if mat_obj.MaterialShapes == 'all':
+                all_material = True
+                f.write('*ELSET,ELSET=' + mat_obj_name + '\n')
                 f.write('Eall\n')
-            else:
-                if mat_obj_name == 'MechanicalMaterial':
-                    f.write('Eall\n')
+            elif mat_obj.MaterialShapes == 'remaining':
+                remaining_material_obj = mat_obj
+            elif mat_obj.MaterialShapes == 'referenced':
+                f.write('*ELSET,ELSET=' + mat_obj_name + '\n')
+                for s in mat_obj.Reference:
+                    no = []
+                    el = []
+                    if s.Shape.ShapeType == 'Solid':
+                        # print '  MaterialReferenceSolid : ', s.Name  
+                        no = self.mesh_object.FemMesh.getNodesBySolid(s.Shape)
+                        el = getElementsByNodes(elementtable, no)
+                    else:
+                        print '  Only solids are supported by now!'
+                    for e in sorted(el):
+                        f.write(str(e) + ',\n')
+                    e_count += len(el)
+                    e_referenced += el
+        if remaining_material_obj:
+            # print mat_obj_name, ':  ', mat_name, ':  ', mat_obj.MaterialShapes 
+            f.write('*ELSET,ELSET=' + remaining_material_obj.Name + '\n')
+            for e in elementtable:
+                if e not in e_referenced:
+                    e_not_referenced.append(e)
+            for e in sorted(e_not_referenced):
+                f.write(str(e) + ',\n')
+            e_count += len(e_not_referenced)
+        f.write('\n\n')
+        if not all_material:
+            if e_count != len(elementtable):
+                print 'ERROR: elementtable != e_count'
+                print e_count
+                print len(elementtable)
 
     def write_fixed_node_sets(self, f):
         f.write('\n***********************************************************\n')
@@ -128,11 +182,7 @@ class inp_writer:
             f.write('{}, '.format(YM_in_MPa))
             f.write('{0:.3f}\n'.format(PR))
             # write element properties
-            if len(self.material_objects) == 1:
-                f.write('*SOLID SECTION, ELSET=' + mat_obj_name + ', MATERIAL=' + mat_name + '\n')
-            else:
-                if mat_obj_name == 'MechanicalMaterial':
-                    f.write('*SOLID SECTION, ELSET=' + mat_obj_name + ', MATERIAL=' + mat_name + '\n')
+            f.write('*SOLID SECTION, ELSET=' + mat_obj_name + ', MATERIAL=' + mat_name + '\n\n')
 
     def write_step_begin(self, f):
         f.write('\n***********************************************************\n')
