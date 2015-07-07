@@ -83,7 +83,7 @@ class _MechanicalMaterial:
         obj.MaterialShapes = material_shapes
         obj.setEditorMode("MaterialShapes", 2) # hidden
         obj.MaterialShapes = 'referenced'
-        self.Type = "MechanicaltMaterial"
+        self.Type = "MechanicalMaterial"
         obj.Proxy = self
         # obj.Material = StartMat
 
