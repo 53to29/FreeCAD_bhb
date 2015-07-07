@@ -193,8 +193,8 @@ class _MechanicalMaterialTaskPanel:
         if self.sel_server:
             FreeCADGui.Selection.removeObserver(self.sel_server)
         self.obj.Material = self.previous_material
-        print "Reverting to material:"
-        self.print_mat_data(self.previous_material)
+        # print "Reverting to material:"
+        # self.print_mat_data(self.previous_material)
         FreeCADGui.ActiveDocument.resetEdit()
 
     def goMatWeb(self):
@@ -229,7 +229,7 @@ class _MechanicalMaterialTaskPanel:
         if 'Description' in self.obj.Material:
             gen_mat_desc = self.obj.Material['Description']
         self.form.l_mat_description.setText(gen_mat_desc)
-        self.print_mat_data(self.obj.Material)
+        # self.print_mat_data(self.obj.Material)
 
     def get_material_name(self, material):
         if 'Name' in self.previous_material:
