@@ -116,15 +116,19 @@ class inp_writer:
         f.write('** written by {} function\n'.format(sys._getframe().f_code.co_name))
         for fobj in self.fixed_objects:
             fix_obj = fobj['Object']
+            # print fix_obj.Name
             f.write('*NSET,NSET=' + fix_obj.Name + '\n')
             for o, elem in fix_obj.References:
                 fo = o.Shape.getElement(elem)
                 n = []
                 if fo.ShapeType == 'Face':
+                    # print '  Face Support (fixed face) on: ', elem
                     n = self.mesh_object.FemMesh.getNodesByFace(fo)
                 elif fo.ShapeType == 'Edge':
+                    # print '  Line Support (fixed edge) on: ', elem
                     n = self.mesh_object.FemMesh.getNodesByEdge(fo)
                 elif fo.ShapeType == 'Vertex':
+                    # print '  Point Support (fixed vertex) on: ', elem
                     n = self.mesh_object.FemMesh.getNodesByVertex(fo)
                 for i in n:
                     f.write(str(i) + ',\n')
@@ -135,24 +139,25 @@ class inp_writer:
         f.write('** written by {} function\n'.format(sys._getframe().f_code.co_name))
         for fobj in self.force_objects:
             frc_obj = fobj['Object']
-            print frc_obj.Name
+            # print frc_obj.Name
             f.write('*NSET,NSET=' + frc_obj.Name + '\n')
             NbrForceNodes = 0
             for o, elem in frc_obj.References:
                 fo = o.Shape.getElement(elem)
                 n = []
                 if fo.ShapeType == 'Edge':
-                    print '  Line Load (edge load) on: ', elem
+                    # print '  Line Load (edge load) on: ', elem
                     n = self.mesh_object.FemMesh.getNodesByEdge(fo)
                 elif fo.ShapeType == 'Vertex':
-                    print '  Point Load (vertex load) on: ', elem
+                    # print '  Point Load (vertex load) on: ', elem
                     n = self.mesh_object.FemMesh.getNodesByVertex(fo)
                 for i in n:
                     f.write(str(i) + ',\n')
                     NbrForceNodes = NbrForceNodes + 1   # NodeSum of mesh-nodes of ALL reference shapes from force_object
             # calculate node load
             if NbrForceNodes == 0:
-                print 'No Line Loads or Point Loads in the model'
+                pass
+                # print 'No Line Loads or Point Loads in the model'
             else:
                 fobj['NodeLoad'] = (frc_obj.Force) / NbrForceNodes
                 #  FIXME this method is incorrect, but we don't have anything else right now
@@ -238,15 +243,15 @@ class inp_writer:
                 if elem_o.ShapeType == 'Face':
                     sum_ref_face_area += elem_o.Area
             if sum_ref_face_area != 0:
-                print frc_obj.Name, ', AreaLoad on faces, CLOAD is used'
+                # print frc_obj.Name, ', AreaLoad on faces, CLOAD is used'
                 force_per_sum_ref_face_area = frc_obj.Force / sum_ref_face_area
-                print '  force_per_sum_ref_face_area: ', force_per_sum_ref_face_area
+                # print '  force_per_sum_ref_face_area: ', force_per_sum_ref_face_area
 
             for o, elem in frc_obj.References:
                 elem_o = o.Shape.getElement(elem)
                 if elem_o.ShapeType == 'Face':
                     ref_face = elem_o
-                    print '  ', o.Name, '.', elem,
+                    # print '  ', o.Name, '.', elem,
                     f.write('** ' + frc_obj.Name + '\n')
                     f.write('*CLOAD\n')
                     f.write('** node loads on element face: ' + o.Name + '.' + elem + '\n')
@@ -329,7 +334,7 @@ class inp_writer:
                     for n in node_sumarea_table:
                         # print n, ' --> ', node_sumarea_table[n]
                         sum_node_areas = sum_node_areas + node_sumarea_table[n]
-                    print '    sum_node_areas ', sum_node_areas, ' ref_face.Area: ', ref_face.Area
+                    # print '    sum_node_areas ', sum_node_areas, ' ref_face.Area: ', ref_face.Area
                     sum_ref_face_node_area += sum_node_areas
 
                     # write CLOAD lines to CalculiX file
