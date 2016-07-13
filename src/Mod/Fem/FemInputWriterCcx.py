@@ -67,22 +67,47 @@ class FemInputWriterCcx(FemInputWriter.FemInputWriter):
         print('FemInputWriterCcx --> self.file_name  -->  ' + self.file_name)
 
     def write_calculix_input_file(self):
-        self.femmesh.writeABAQUS(self.file_name)
-
+        name = ""
+        for i in range(len(self.file_name)-4):
+            name = name + self.file_name[i] 
+        self.mesh_object.FemMesh.writeABAQUS(name+ "_Nodes_elem.inp")
         # reopen file with "append" and add the analysis definition
-        inpfile = open(self.file_name, 'a')
-        inpfile.write('\n\n')
+        inpfile = open(self.file_name, 'w')
+        inpfile.write('\n')
+        inpfile.write('**Nodes and Elements\n')
+        inpfile.write('** written by write_nodes_elements \n')
+        inpfile.write('*INCLUDE,INPUT=' +name+ '_Nodes_elem.inp \n')
         self.write_element_sets_material_and_femelement_type(inpfile)
-        if self.fixed_objects:
-            self.write_node_sets_constraints_fixed(inpfile)
-        if self.displacement_objects:
-            self.write_node_sets_constraints_displacement(inpfile)
-        if self.planerotation_objects:
-            self.write_node_sets_constraints_planerotation(inpfile)
-        if self.contact_objects:
-            self.write_surfaces_contraints_contact(inpfile)
-        if self.analysis_type == "thermomech" and self.temperature_objects:
-            self.write_temperature_nodes(inpfile)
+        inpfile.close()
+        inpfile = open(name+ "_Node_sets.inp", 'w')
+        self.write_node_sets_constraints_fixed(inpfile)
+        self.write_node_sets_constraints_displacement(inpfile)
+        self.write_node_sets_constraints_planerotation(inpfile)
+        self.write_surfaces_contraints_contact(inpfile)
+        inpfile = open(self.file_name, 'a')
+        inpfile.write('\n***********************************************************\n')
+        inpfile.write('** Node set(s) for fixed constraint\n')
+        for femobj in self.fixed_objects:
+            inpfile.write('   **' + femobj['Object'].Name + '\n')        
+        inpfile.write('** Node set(s) for PlaneRotation constraint\n')
+        for femobj in self.planerotation_objects:
+            inpfile.write('   **' + femobj['Object'].Name + '\n')
+        inpfile.write('** Node set(s) for prescribed displacement constraint\n')
+        for femobj in self.displacement_objects:
+            inpfile.write('   **' + femobj['Object'].Name + '\n')
+        inpfile.write('** Node set(s) for loads\n')
+        for femobj in self.force_objects:
+            inpfile.write('   **' + femobj['Object'].Name + '\n')
+        inpfile.write('** Node set(s) for temperature constraint\n')
+        for femobj in self.temperature_objects:
+            inpfile.write('   **' + femobj['Object'].Name + '\n')
+        inpfile.write('** written by write_node_sets_constraints \n')
+        inpfile.write('*INCLUDE,INPUT=' +name+ "_Node_sets.inp \n")
+        if self.analysis_type == "thermomech": # OvG: placed under thermomech analysis
+            inpfileNodes = open(name+ "_Node_sets.inp", 'a')  
+            self.write_temperature_nodes(inpfileNodes)
+            inpfileNodes.close()
+        inpfile = open(self.file_name, 'a')
         self.write_materials(inpfile)
         if self.analysis_type == "thermomech" and self.initialtemperature_objects:
             self.write_initialtemperature(inpfile)
@@ -102,12 +127,42 @@ class FemInputWriterCcx(FemInputWriter.FemInputWriter):
             self.write_constraints_displacement(inpfile)
         if self.analysis_type == "thermomech": # OvG: placed under thermomech analysis
             self.write_temperature(inpfile)
+            inpfile.write('\n***********************************************************\n')
+            inpfile.write('** Convective heat transfer (heat flux)\n')
+            inpfile.write('** written by write_heatflux\n')            
+            inpfile.write('*INCLUDE,INPUT=' +name+ "_Heatflux.inp \n\n")
+            inpfileHeatflux = open(name + "_Heatflux.inp","w")            
             self.write_heatflux(inpfileHeatflux)
+            inpfileHeatflux.close()
+            inpfile.write('\n***********************************************************\n')
+            inpfile.write('** Node loads\n')
+            inpfile.write('** written by write_constraints_force\n')
+            inpfile.write('*INCLUDE,INPUT=' +name+ "_Contraints_Force.inp \n\n")
+            inpfileForce = open(name+ "_Contraints_Force.inp","w")
+            self.write_constraints_force(inpfileForce)
+            inpfileForce.close()
+            inpfile.write('\n***********************************************************\n')
+            inpfile.write('** Element + CalculiX face + load in [MPa]\n')
+            inpfile.write('** written by write_constraints_pressure\n')
+            inpfile.write('*INCLUDE,INPUT=' +name+ "_Contraints_Pressure.inp \n\n")
+            inpfilePressure = open(name+ "_Contraints_Pressure.inp","w")
+            self.write_constraints_pressure(inpfilePressure)
+            inpfilePressure.close()
         if self.analysis_type is None or self.analysis_type == "static":
-            if self.force_objects:
-                self.write_constraints_force(inpfile)
-            if self.pressure_objects:
-                self.write_constraints_pressure(inpfile)
+            inpfile.write('\n***********************************************************\n')
+            inpfile.write('** Node loads\n')
+            inpfile.write('** written by write_constraints_force\n')
+            inpfile.write('*INCLUDE,INPUT=' +name+ "_Contraints_Force.inp \n\n")
+            inpfileForce = open(name+ "_Contraints_Force.inp","w")
+            self.write_constraints_force(inpfileForce)
+            inpfileForce.close()
+            inpfile.write('\n***********************************************************\n')
+            inpfile.write('** Element + CalculiX face + load in [MPa]\n')
+            inpfile.write('** written by write_constraints_pressure\n')
+            inpfile.write('*INCLUDE,INPUT=' +name+ "_Contraints_Pressure.inp \n\n")
+            inpfilePressure = open(name+ "_Contraints_Pressure.inp","w")
+            self.write_constraints_pressure(inpfilePressure)
+            inpfilePressure.close()
         elif self.analysis_type == "frequency":
             self.write_frequency(inpfile)
         self.write_outputs_types(inpfile)
