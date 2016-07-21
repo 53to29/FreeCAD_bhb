@@ -1,9 +1,8 @@
 
 if(BUILD_FEM_VTK)
+    include(${VTK_USE_FILE})
     add_definitions(-DFC_USE_VTK)
 endif(BUILD_FEM_VTK)
-
-include(${VTK_USE_FILE})
 
 add_subdirectory(App)
 
