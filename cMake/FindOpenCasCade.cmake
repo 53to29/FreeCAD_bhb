@@ -23,7 +23,9 @@ if(NOT DEFINED OCE_DIR)
   endif()
 endif()
 
-find_package(OCE QUIET)
+if(NOT DEFINED OCE_DIR)
+  find_package(OCE QUIET)
+endif()
 if(OCE_FOUND)
   message(STATUS "-- OpenCASCADE Community Edition has been found.")
   # Disable this define. For more details see bug #0001872
