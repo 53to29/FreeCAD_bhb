@@ -37,7 +37,8 @@
 #include <SMESH_ProxyMesh.hxx>
 
 namespace nglib {
-#include <nglib.h>
+//#include <nglib.h>
+#include "/opt/netgen/include/nglib.h"
 }
 
 #include <map>

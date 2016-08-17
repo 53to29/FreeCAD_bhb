@@ -230,7 +230,7 @@ else(MSVC)
     set(FREECAD_USE_3DCONNEXION OFF)
 endif(MSVC)
 if(NOT MSVC)
-    OPTION(BUILD_FEM_NETGEN "Build the FreeCAD FEM module with the NETGEN mesher" OFF)
+    OPTION(BUILD_FEM_NETGEN "Build the FreeCAD FEM module with the NETGEN mesher" ON)
     OPTION(FREECAD_USE_PCL "Build the features that use PCL libs" OFF)
 endif(NOT MSVC)
 
