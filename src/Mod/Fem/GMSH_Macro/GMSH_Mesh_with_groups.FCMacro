@@ -445,8 +445,11 @@ def isSameGeometry(shape1, shape2):
 
 def get_group_elements(myAnalysis, myPart):
     group_elements = {}
-    has_empty_references = False
+    empty_references = []
+    material_obj_count = 0
     for m in myAnalysis.Member:
+        if m.isDerivedFrom("App::MaterialObjectPython"):
+            material_obj_count += 1
         if hasattr(m, "References"):
             # print(m.Name)
             key = m.Name
@@ -481,12 +484,19 @@ def get_group_elements(myAnalysis, myPart):
                             print('    ' + r[0].Name)
                     else:
                         FreeCAD.Console.PrintError('Problem: more than one element.\n')
+                group_elements[key] = [stype, sorted(indexes)]
             else:
                 print('Empty reference: ' + m.Name)
-                has_empty_references = True
-            group_elements[key] = [stype, sorted(indexes)]
-    if has_empty_references:
-        group_elements = get_empty_references_group_elements(group_elements, myAnalysis, myPart)
+                empty_references.append(m)
+    if empty_references:
+        if len(empty_references) == 1:
+            if material_obj_count > 1:
+                group_elements = get_empty_references_group_elements(group_elements, myAnalysis, myPart)
+            elif material_obj_count == 1:
+                print('Analysis has only one material object, no group needed!')
+        else:
+            FreeCAD.Console.PrintError('Error: more than one object with empty references!\n')
+            print(empty_references)
     # check if all groups have elements:
     for g in group_elements:
         # print group_elements[g][1]
@@ -536,7 +546,6 @@ def get_empty_references_group_elements(group_elements, myAnalysis, myPart):
     # print(sorted(material_ref_shapes))
     # print(sorted(missed_material_refshapes))
     # print(group_elements)
-    group_elements[empty_reference_material][0] = material_shape_type
-    group_elements[empty_reference_material][1] = sorted(missed_material_refshapes)
+    group_elements[empty_reference_material] = [material_shape_type, sorted(missed_material_refshapes)]
     # print(group_elements)
     return group_elements
