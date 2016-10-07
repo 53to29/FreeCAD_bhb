@@ -1,0 +1,542 @@
+# -*- coding: utf-8 -*-
+# FEMMesh by GMSH inside FreeCAD
+# Author: Bernd Hahnebach (bernd@bimstatik.org) based on the work of Gomez Lucio
+# License: LGPL v 2.1
+
+
+# CONFIGURATION - EDIT THE FOLLOWING LINE TO MATCH YOUR GMSH BINARY
+# gmsh_bin_linux = "/usr/bin/gmsh"
+gmsh_bin_linux = "/usr/local/bin/gmsh"
+gmsh_bin_windwos = "C:\\Daten\\gmsh-2.13.2-Windows\\gmsh.exe"
+gmsh_bin_other = "/usr/bin/gmsh"
+# END CONFIGURATION
+
+
+import FreeCAD
+import FreeCADGui
+import Fem
+import subprocess
+import tempfile
+from platform import system
+from PySide import QtGui, QtCore
+# from PySide.QtGui import QApplication, QCursor
+
+
+class MeshGmsh(QtGui.QWidget):
+    def __init__(self):
+        super(MeshGmsh, self).__init__()
+        self.init_ui()
+
+    def __del__(self):  # need as fix for qt event error --> see http://forum.freecadweb.org/viewtopic.php?f=18&t=10732&start=10#p86493
+        return
+
+    def init_ui(self):
+        # Title
+        self.macrotitle_label = QtGui.QLabel("<b>Macro GMSH mesh generator <b>", self)
+        # Dimension
+        self.dimension_label = QtGui.QLabel("Mesh dimension ", self)
+        self.dimension_combo = QtGui.QComboBox(self)
+        self.dimension_list = [self.tr('auto'), self.tr('3D'), self.tr('2D'), self.tr('1D')]
+        self.dimension_combo.addItems(self.dimension_list)
+        self.dimension_combo.setCurrentIndex(0)
+        '''
+        # Algorithm
+        self.algorithm_label = QtGui.QLabel("Mesh algorithm ", self)
+        self.algorithm_combo = QtGui.QComboBox(self)
+        self.algorithm_list = [self.tr('auto'), self.tr('iso'), self.tr('netgen'), self.tr('tetgen'), self.tr('meshadapt'), self.tr('del3'), self.tr('delquad')]
+        self.algorithm_combo.addItems(self.algorithm_list)
+        self.algorithm_combo.setCurrentIndex(0)
+        '''
+        # Max Element size
+        self.element_size_max_label = QtGui.QLabel("Max element size ", self)
+        self.element_size_max_dspin = QtGui.QDoubleSpinBox(self)
+        self.element_size_max_dspin.setValue(0.0)
+        self.element_size_max_dspin.setMaximum(10000000.0)
+        self.element_size_max_dspin.setMinimum(0.00000001)
+        # Min Element size
+        self.element_size_min_label = QtGui.QLabel("Min element size ", self)
+        self.element_size_min_dspin = QtGui.QDoubleSpinBox(self)
+        self.element_size_min_dspin.setValue(0.0)
+        self.element_size_min_dspin.setMaximum(10000000.0)
+        self.element_size_min_dspin.setMinimum(0.00000001)
+        # Mesh Order
+        self.mesh_order_label = QtGui.QLabel("Mesh order ", self)
+        self.mesh_order_combo = QtGui.QComboBox(self)
+        self.mesh_order_list = [self.tr('auto'), self.tr('1'), self.tr('2')]
+        self.mesh_order_combo.addItems(self.mesh_order_list)
+        self.mesh_order_combo.setCurrentIndex(0)
+        '''
+        # Optimized
+        self.optimized_label = QtGui.QLabel("Optimize mesh ", self)
+        self.optimized_combo = QtGui.QComboBox(self)
+        self.optimized_list = [self.tr('auto'), self.tr('True'), self.tr('False')]
+        self.optimized_combo.addItems(self.optimized_list)
+        self.optimized_combo.setCurrentIndex(0)
+        '''
+        # Ok buttons:
+        self.ok_button = QtGui.QDialogButtonBox(self)
+        self.ok_button.setOrientation(QtCore.Qt.Horizontal)
+        self.ok_button.setStandardButtons(QtGui.QDialogButtonBox.Cancel | QtGui.QDialogButtonBox.Ok)
+        # show widget elements
+        self.macrotitle_label.show()
+        # Layout:
+        layout = QtGui.QGridLayout()
+        layout.addWidget(self.dimension_label,             1, 0)
+        layout.addWidget(self.dimension_combo,             1, 1)
+        # layout.addWidget(self.algorithm_label,             3, 0)
+        # layout.addWidget(self.algorithm_combo,             3, 1)
+        layout.addWidget(self.mesh_order_label,            5, 0)
+        layout.addWidget(self.mesh_order_combo,            5, 1)
+        # layout.addWidget(self.optimized_label,             6, 0)
+        # layout.addWidget(self.optimized_combo,             6, 1)
+        layout.addWidget(self.element_size_min_label,      7, 0)
+        layout.addWidget(self.element_size_min_dspin,      7, 1)
+        layout.addWidget(self.element_size_max_label,      8, 0)
+        layout.addWidget(self.element_size_max_dspin,      8, 1)
+        layout.addWidget(self.ok_button,                   9, 1)
+        self.setLayout(layout)
+        # Connectors:
+        QtCore.QObject.connect(self.ok_button, QtCore.SIGNAL("accepted()"), self.accept)
+        QtCore.QObject.connect(self.ok_button, QtCore.SIGNAL("rejected()"), self.reject)
+
+    def accept(self):
+        print("\nWe gone start GMSH FEM mesh macro run!")
+        # is called when OK button is triggered
+        if self.get_part():
+            self.get_gmsh_args()
+            self.get_tmp_file_paths()
+            self.get_gmsh_command()
+            self.write_part_file()
+            if self.analysis:
+                self.get_group_data()
+            self.write_geo()
+            self.run_gmsh_with_geo()
+            self.import_mesh()
+        else:
+            FreeCAD.Console.PrintError("Macro aborted: Not an appropriate Part for meshing selected.\n")
+
+    def reject(self):
+        self.close()
+        d.close()
+
+    def f2DState(self, state):
+        if state == QtCore.Qt.Checked:
+            self.f2D = True
+            self.CB3D.setCheckState(QtCore.Qt.Unchecked)
+        else:
+            self.f2D = False
+
+    def f3DState(self, state):
+        if state == QtCore.Qt.Checked:
+            self.f3D = True
+            self.CB2D.setCheckState(QtCore.Qt.Unchecked)
+        else:
+            self.f3D = False
+
+    def get_part(self):
+        sel = FreeCADGui.Selection.getSelection()
+        if len(sel) == 1:
+            if hasattr(sel[0], "Shape"):
+                print('One object with a shape selected. We will use the old mode and just mesh the shape.')
+                self.mesh_file_name = sel[0].Name
+                self.part_obj_shape = sel[0].Shape
+                self.analysis = None
+                return True
+            else:
+                FreeCAD.Console.PrintError("The selected object does not contain a Shape.\n")
+                return False
+        if len(sel) == 2:
+            if hasattr(sel[0], "Shape"):
+                self.mesh_file_name = sel[0].Name
+                self.part_obj_shape = sel[0].Shape
+            else:
+                print('first select Shape than Analysis')
+                return False
+            if sel[1].isDerivedFrom('Fem::FemAnalysisPython') and self.part_obj_shape:
+                print('A shape and a analysis  selected. We will use the group mode and try to create groups for the reference shapes of each constraint .')
+                self.analysis = sel[1]
+                return True
+            else:
+                print('first select Shape than Analysis')
+                return False
+        else:
+            FreeCAD.Console.PrintError("Select exact one object!\n")
+            return False
+
+    def get_group_data(self):
+        self.group_elements = get_group_elements(self.analysis, self.part_obj_shape)
+        print(self.group_elements)
+
+    def get_dimension(self):
+        # Dimension
+        # GMSH uses the hightest availabe. The only use cas for not outo would be
+        # surface (2D) mesh of a solid or other 3d shape
+        if self.dimension_combo.currentText() == 'auto':
+            shty = self.part_obj_shape.ShapeType
+            print('Part to mesh: ' + self.mesh_file_name + ' --> ' + shty)
+            if shty == 'Solid' or shty == 'CompSolid':
+                # print('Found: ' + shty)
+                self.dimension = '3'
+            elif shty == 'Face' or shty == 'Shell':
+                # print('Found: ' + shty)
+                self.dimension = '2'
+            elif shty == 'Edge' or shty == 'Wire':
+                # print('Found: ' + shty)
+                self.dimension = '1'
+            elif shty == 'Vertex':
+                # print('Found: ' + shty)
+                FreeCAD.Console.PrintError("You can not mesh a Vertex.\n")
+                self.dimension = '0'
+            elif shty == 'Compound':
+                print('Found: ' + shty)
+                print('I do not know what is inside your Compound. Dimension was set to 3 anyway.')
+                # TODO check contents of Compound
+                # use dimension 3 on any shape works for 2D and 1d meshes as well !
+                # but not in combination with sewfaces or connectfaces
+                self.dimension = '3'
+            else:
+                self.dimension = '0'
+                FreeCAD.Console.PrintError('Could not retrive Dimension from shape type. Please choose dimension.')
+        elif self.dimension_combo.currentText() == '3D':
+            self.dimension = '3'
+        elif self.dimension_combo.currentText() == '2D':
+            self.dimension = '2'
+        elif self.dimension_combo.currentText() == '1D':
+            self.dimension = '1'
+        print('Mesh dimension: ' + self.dimension)
+
+    '''
+    def get_algorithm(self):
+        # Algorithm
+        if self.algorithm_combo.currentText() == 'auto':
+            self.algorithm = '  -algo netgen'  # standard algorithm = netgen
+        else:
+            self.algorithm = '  -algo ' + self.algorithm_combo.currentText()
+    '''
+
+    def get_max_element_size(self):
+        # Max Element size
+        value = self.element_size_max_dspin.value()
+        if not value:
+            self.clmax = '1e+22'
+        else:
+            self.clmax = value
+
+    def get_min_element_size(self):
+        # Min Element size
+        value = self.element_size_min_dspin.value()
+        if not value:
+            self.clmin = '0.0'
+        else:
+            self.clmin = value
+
+    def get_mesh_order(self):
+        # Mesh Order
+        if self.mesh_order_combo.currentText() == 'auto':
+            self.order = '2'  # standard order = 2
+        else:
+            self.order = self.mesh_order_combo.currentText()
+
+    '''
+    def get_optimized(self):
+        # Optimized
+        if self.optimized_combo.currentText() == 'auto':
+            self.opt = '  -optimize'  # standard optimization = True
+        elif self.optimized_combo.currentText() == 'True':
+            self.opt = '  -optimize'
+        else:
+            self.opt = ' '
+        #if self.is_optimized is True:
+        #    self.opt = ' -optimize'
+        #else:
+        #    self.opt = ' '
+    '''
+
+    def get_gmsh_args(self):
+        self.get_dimension()
+        # self.get_algorithm()
+        self.get_max_element_size()
+        self.get_min_element_size()
+        self.get_mesh_order()
+        # self.get_optimized()
+
+    def get_tmp_file_paths(self):
+        if system() == "Linux":
+            path_sep = "/"
+        elif system() == "Windows":
+            path_sep = "\\"
+        else:
+            path_sep = "/"
+        tmpdir = tempfile.gettempdir()
+        # geometry file
+        self.temp_file_geometry = tmpdir + path_sep + self.mesh_file_name + '_geometry.brep'
+        print(self.temp_file_geometry)
+        # mesh file
+        self.temp_file_mesh = tmpdir + path_sep + self.mesh_file_name + '_mesh.unv'
+        print(self.temp_file_mesh)
+        # GMSH input file
+        self.temp_file_geo = tmpdir + path_sep + 'shape2mesh.geo'
+        print(self.temp_file_geo)
+
+    def get_gmsh_command(self):
+        if system() == "Linux":
+            self.gmsh_bin = gmsh_bin_linux
+        elif system() == "Windows":
+            self.gmsh_bin = gmsh_bin_windwos
+        else:
+            self.gmsh_bin = gmsh_bin_other
+        self.gmsh_command = self.gmsh_bin + ' - ' + self.temp_file_geo  # gmsh - /tmp/shape2mesh.geo
+        print(self.gmsh_command)
+
+    def write_part_file(self):
+        self.part_obj_shape.exportBrep(self.temp_file_geometry)
+
+    def write_geo(self):
+        geo = open(self.temp_file_geo, "w")
+        geo.write('Merge "' + self.temp_file_geometry + '";\n')
+        geo.write("\n")
+        if self.analysis and self.group_elements:
+            geo.write("// group data\n")
+            for group in self.group_elements:
+                gdata = self.group_elements[group]
+                # print(gdata)
+                # geo.write("// " + group + "\n")
+                if gdata[0] == 'Solid':
+                    physical_type = 'Volume'
+                elif gdata[0] == 'Face':
+                    physical_type = 'Surface'
+                else:
+                    physical_type = 'Surface'
+                    print('Not known physical_type for group')
+                indexe = ''
+                for no, i in enumerate(gdata[1]):
+                    indexe += str(i + 1)  # index in GMSH starts with 1, in FreeCAD elementlists with 0
+                    if (no + 1) < len(gdata[1]):
+                        indexe += ', '
+                geo.write('Physical ' + physical_type + '("' + group + '") = {' + indexe + '};\n')
+            geo.write("\n")
+        geo.write("Mesh.CharacteristicLengthMax = " + str(self.clmax) + ";\n")
+        geo.write("Mesh.CharacteristicLengthMin = " + str(self.clmin) + ";\n")
+        geo.write("Mesh.ElementOrder = " + self.order + ";\n")
+        geo.write("//Mesh.HighOrderOptimize = 1;\n")  # but does not really work, in GUI it does
+        geo.write("Mesh.Algorithm3D = 1;\n")
+        geo.write("Mesh.Algorithm = 2;\n")
+        geo.write("Mesh  " + self.dimension + ";\n")
+        geo.write("Mesh.Format = 2;\n")  # unv
+        if self.analysis and self.group_elements:
+            geo.write("Mesh.SaveGroupsOfNodes = 1;\n")
+        else:
+            geo.write("Mesh.SaveAll = 1;\n")
+        geo.write("\n")
+        geo.write('Save "' + self.temp_file_mesh + '";\n')
+        geo.write("\n\n")
+        geo.write("//////////////////////////////////////////////////////////////////////\n")
+        geo.write("// We do check if something went wrong, like negative jacobians etc.\n")
+        geo.write("//\n")
+        geo.write("// to see full GMSH log, run in bash:\n")
+        geo.write("// gmsh - shape2mesh.geo\n")
+        geo.write("//\n")
+        geo.write("// to run GMSH and keep file in GMSH GUI (with log), run in bash:\n")
+        geo.write("// gmsh shape2mesh.geo\n")
+        geo.close
+
+    def run_gmsh_with_geo(self):
+        self.error = False
+        comandlist = [self.gmsh_bin, '-', self.temp_file_geo]
+        # print(comandlist)
+        try:
+            p = subprocess.Popen(comandlist, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output, error = p.communicate()
+            # print out  # stdout is still cut at some point but the warnings are in stderr and thus printed :-)
+            print error
+        except:
+            FreeCAD.Console.PrintError('Error executing: {}\n'.format(self.gmsh_command))
+            self.error = True
+
+    def import_mesh(self):
+        if not self.error:
+            Fem.insert(self.temp_file_mesh, FreeCAD.ActiveDocument.Name)
+            print('Mesh file: ' + self.temp_file_mesh + ' inserted into active FreeCAD document.')
+        else:
+            print('No mesh was imported.')
+        del self.temp_file_geometry
+        del self.temp_file_mesh
+
+
+mw = FreeCADGui.getMainWindow()
+d = QtGui.QDockWidget()
+d.setWidget(MeshGmsh())
+mw.addDockWidget(QtCore.Qt.RightDockWidgetArea, d)
+
+
+# helper
+def find_element(myPart, myElement):
+    # import Part
+    if myElement.ShapeType == 'Solid' or myElement.ShapeType == 'CompSolid':
+        for index, solid in enumerate(myPart.Solids):
+            # print(isSameGeometry(solid, myElement))
+            if isSameGeometry(solid, myElement):
+                # print(index)
+                # Part.show(myPart.Solids[index])
+                return index
+        FreeCAD.Console.PrintError('Solid ' + str(myElement) + ' not found in: ' + str(myPart) + '\n')
+        if myElement.ShapeType == 'Solid' and myPart.ShapeType == 'Solid':
+            print('We have been searching for a Solid in a Solid and we have not found it. In most cases this should be searching for a Solid inside a CompSolid. Check the ShapeType of your Part to mesh.')
+        # Part.show(myElement)
+        # Part.show(myPart)
+    elif myElement.ShapeType == 'Face' or myElement.ShapeType == 'Shell':
+        for index, face in enumerate(myPart.Faces):
+            # print(isSameGeometry(face, myElement))
+            if isSameGeometry(face, myElement):
+                # print(index)
+                # Part.show(myPart.Faces[index])
+                return index
+    elif myElement.ShapeType == 'Edge' or myElement.ShapeType == 'Wire':
+        for index, face in enumerate(myPart.Edges):
+            # print(isSameGeometry(face, myElement))
+            if isSameGeometry(face, myElement):
+                # print(index)
+                # Part.show(myPart.Edges[index])
+                return index
+    elif myElement.ShapeType == 'Vertex':
+        for index, face in enumerate(myPart.Vertexes):
+            # print(isSameGeometry(face, myElement))
+            if isSameGeometry(face, myElement):
+                # print(index)
+                # Part.show(myPart.Vertexes[index])
+                return index
+    elif myElement.ShapeType == 'Compound':
+        FreeCAD.Console.PrintError('Compound is not supported.\n')
+
+
+def isSameGeometry(shape1, shape2):
+    # the vertexes and the CenterOfMass are compared
+    # it is a hack, but I do not know any better !
+    # I could add Volume, and Area before starting with the vertices
+    # print(shape1)
+    # print(shape2)
+    same_Vertexes = 0
+    if len(shape1.Vertexes) == len(shape2.Vertexes) and len(shape1.Vertexes) > 1:
+        # compare CenterOfMass
+        if shape1.CenterOfMass != shape2.CenterOfMass:
+            return False
+        else:
+            # compare the Vertexes
+            for vs1 in shape1.Vertexes:
+                for vs2 in shape2.Vertexes:
+                    if vs1.X == vs2.X and vs1.Y == vs2.Y and vs1.Z == vs2.Z:
+                        same_Vertexes += 1
+                        continue
+            # print(same_Vertexes)
+            if same_Vertexes == len(shape1.Vertexes):
+                return True
+            else:
+                return False
+    if len(shape1.Vertexes) == len(shape2.Vertexes) and len(shape1.Vertexes) == 1:
+        vs1 = shape1.Vertexes[0]
+        vs2 = shape2.Vertexes[0]
+        if vs1.X == vs2.X and vs1.Y == vs2.Y and vs1.Z == vs2.Z:
+            return True
+        else:
+            return False
+    else:
+        return False
+
+
+def get_group_elements(myAnalysis, myPart):
+    group_elements = {}
+    has_empty_references = False
+    for m in myAnalysis.Member:
+        if hasattr(m, "References"):
+            # print(m.Name)
+            key = m.Name
+            indexes = []
+            stype = None
+            if m.References:
+                for r in m.References:
+                    parent = r[0]
+                    childs = r[1]
+                    # print(parent)
+                    # print(childs)
+                    if len(childs) == 1:
+                        child = childs[0]
+                        if child:
+                            # Face, Edge, Vertex
+                            ref_shape = parent.Shape.getElement(child)
+                        else:
+                            # Solid
+                            ref_shape = parent.Shape
+                        if not stype:
+                            stype = ref_shape.ShapeType
+                        elif stype != ref_shape.ShapeType:
+                            FreeCAD.Console.PrintError('Error, two refschapes in References with different ShapeTypes.\n')
+                        # print(ref_shape)
+                        found_element = find_element(myPart, ref_shape)
+                        if found_element is not None:
+                            indexes.append(found_element)
+                        else:
+                            FreeCAD.Console.PrintError('Problem: No element found for: ' + str(ref_shape) + '\n')
+                            print('    ' + m.Name)
+                            print('    ' + str(m.References))
+                            print('    ' + r[0].Name)
+                    else:
+                        FreeCAD.Console.PrintError('Problem: more than one element.\n')
+            else:
+                print('Empty reference: ' + m.Name)
+                has_empty_references = True
+            group_elements[key] = [stype, sorted(indexes)]
+    if has_empty_references:
+        group_elements = get_empty_references_group_elements(group_elements, myAnalysis, myPart)
+    # check if all groups have elements:
+    for g in group_elements:
+        # print group_elements[g][1]
+        if len(group_elements[g][1]) == 0:
+            FreeCAD.Console.PrintError('Error: shapes for: ' + g + 'not found!\n')
+    return group_elements
+
+
+def get_empty_references_group_elements(group_elements, myAnalysis, myPart):
+    material_ref_shapes = []
+    material_shape_type = ''
+    missed_material_refshapes = []
+    empty_reference_material = None
+    for m in myAnalysis.Member:
+        # only materials could have an empty reference without beeing something wrong!
+        if m.isDerivedFrom("App::MaterialObjectPython"):
+            if hasattr(m, "References") and m.References:
+                if not material_shape_type:
+                    material_shape_type = group_elements[m.Name][0]
+                elif material_shape_type != group_elements[m.Name][0]:
+                    print('Problem, material shape type does not match get_empty_references_group_elements')
+                for i in group_elements[m.Name][1]:
+                    material_ref_shapes.append(i)
+            elif hasattr(m, "References") and not m.References:
+                if not empty_reference_material:
+                    empty_reference_material = m.Name
+                else:
+                    print('Problem in get_empty_references_group_elements, we seams to have two materials with empty referneces')
+                    return {}
+    if material_shape_type == 'Solid':
+        print(len(myPart.Solids))
+        for i in range(len(myPart.Solids)):
+            if i not in material_ref_shapes:
+                missed_material_refshapes.append(i)
+    elif material_shape_type == 'Face':
+        print(len(myPart.Faces))
+        for i in range(len(myPart.Faces)):
+            if i not in material_ref_shapes:
+                missed_material_refshapes.append(i)
+    elif material_shape_type == 'Edge':
+        print(len(myPart.Edges))
+        for i in range(len(myPart.Edges)):
+            if i not in material_ref_shapes:
+                missed_material_refshapes.append(i)
+    else:
+        print('Problem, not known material_shape_type in get_empty_references_group_elements')
+    # print(sorted(material_ref_shapes))
+    # print(sorted(missed_material_refshapes))
+    # print(group_elements)
+    group_elements[empty_reference_material][0] = material_shape_type
+    group_elements[empty_reference_material][1] = sorted(missed_material_refshapes)
+    # print(group_elements)
+    return group_elements
