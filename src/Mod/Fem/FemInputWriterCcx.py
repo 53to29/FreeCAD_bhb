@@ -609,7 +609,12 @@ class FemInputWriterCcx(FemInputWriter.FemInputWriter):
 
     def write_constraints_pressure(self, f):
         # get the faces and face numbers
-        self.get_constraints_pressure_faces()
+        timestart = time.clock()
+        self.get_constraints_pressure_faces_std_search()
+        print("Calculating time FreeCADs algorithm: " + str(time.clock() - timestart) + ' \n')
+        timestart = time.clock()
+        self.get_constraints_pressure_faces_binary_search()
+        print("Calculating time Urichs algorithm: " + str(time.clock() - timestart) + ' \n')
         # write face loads to file
         f.write('\n***********************************************************\n')
         f.write('** Element + CalculiX face + load in [MPa]\n')
@@ -619,6 +624,7 @@ class FemInputWriterCcx(FemInputWriter.FemInputWriter):
             rev = -1 if prs_obj.Reversed else 1
             f.write('*DLOAD\n')
             for ref_shape in femobj['PressureFaces']:
+                print(ref_shape[0])
                 f.write('** ' + ref_shape[0] + '\n')
                 for face, fno in ref_shape[1]:
                     f.write("{},P{},{}\n".format(face, fno, rev * prs_obj.Pressure))

@@ -117,6 +117,44 @@ def get_copy_of_empty_femelement_table(femelement_table):
     return empty_femelement_table.copy()
 
 
+def get_facenodeset_binary_positions_table(femelement_table, femnodes_ele_table, face_node_set):
+    '''Now we are looking for nodes inside of the Faces = filling the ele_dict
+       see forumpost for a ver good explanation whats really happens
+       http://forum.freecadweb.org/viewtopic.php?f=18&p=141133&sid=013c93f496a63872951d2ce521702ffa#p141108
+    '''
+    binary_position_table = get_copy_of_empty_femelement_table(femelement_table)
+    '''{eleID : binary_position}
+    '''
+    for node in face_node_set:
+        for nList in femnodes_ele_table[node]:
+            # print nList
+            binary_position_table[nList[0]] += nList[2]
+    # print  'binary_position_table: ', binary_position_table
+    return binary_position_table
+
+
+def get_ccxelement_faces_from_binary_search(binary_position_table):
+    '''get the CalculiX element face numbers
+    '''
+    faces = []
+    for ele in binary_position_table:
+        if (411 & binary_position_table[ele]) == 411:
+            # print "411 Face P2: ", ele
+            faces.append((ele, 2))
+        if (119 & binary_position_table[ele]) == 119:
+            # print "119 Face P1: ", ele
+            faces.append((ele, 1))
+        if (717 & binary_position_table[ele]) == 717:
+            # print "717 Face P3: ", ele
+            faces.append((ele, 3))
+        if (814 & binary_position_table[ele]) == 814:
+            # print "814 Face P4: ", ele
+            faces.append((ele, 4))
+    # print "found Faces: ", len(faces)
+    # print "faces: ", faces
+    return faces
+
+
 def get_femelements_by_femnodes(femelement_table, node_list):
     '''for every femelement of femelement_table
     if all nodes of the femelement are in node_list,
@@ -372,15 +410,26 @@ def get_force_obj_edge_nodeload_table(femmesh, femelement_table, femnodes_mesh, 
     return force_obj_node_load_table
 
 
-def get_pressure_obj_faces_table(femmesh, prs_obj):
-    pressure_data = []
+def get_pressure_obj_faces_std_search(femmesh, prs_obj):
+    pressure_faces = []
     for o, elem_tup in prs_obj.References:
         for elem in elem_tup:
             ref_shape = o.Shape.getElement(elem)
             elem_info_string = 'face load on shape: ' + o.Name + ':' + elem
             if ref_shape.ShapeType == 'Face':
-                pressure_data.append((elem_info_string, femmesh.getccxVolumesByFace(ref_shape)))
-    return pressure_data
+                pressure_faces.append((elem_info_string, femmesh.getccxVolumesByFace(ref_shape)))
+    return pressure_faces
+
+
+def get_pressure_obj_faces_binary_search(femmesh, femelement_table, femnodes_ele_table, references):
+    # get the nodes
+    prs_face_node_set = get_femnodes_by_references(femmesh, references)  # sorted and duplicates removed
+    # print 'prs_face_node_set: ', prs_face_node_set
+
+    # fill the binary_position_table and search for the faces
+    binary_position_table = get_facenodeset_binary_positions_table(femelement_table, femnodes_ele_table, prs_face_node_set)
+    pressure_faces = get_ccxelement_faces_from_binary_search(binary_position_table)
+    return pressure_faces
 
 
 def get_force_obj_face_nodeload_table(femmesh, femelement_table, femnodes_mesh, frc_obj):

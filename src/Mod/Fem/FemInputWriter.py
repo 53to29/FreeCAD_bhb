@@ -83,6 +83,7 @@ class FemInputWriter():
         self.femnodes_mesh = {}
         self.femelement_table = {}
         self.constraint_conflict_nodes = []
+        self.femnodes_ele_table = {}
 
     def get_constraints_fixed_nodes(self):
         # get nodes
@@ -154,7 +155,7 @@ class FemInputWriter():
             elif femobj['RefShapeType'] == 'Face':  # area load on faces
                 femobj['NodeLoadTable'] = FemMeshTools.get_force_obj_face_nodeload_table(self.femmesh, self.femelement_table, self.femnodes_mesh, frc_obj)
 
-    def get_constraints_pressure_faces(self):
+    def get_constraints_pressure_faces_std_search(self):
         # in GUI defined prs_obj all ref_shape have to be faces!
         # by python non faces Reference shapes could be added.
         # TODO in FemTools: check if all RefShapes really are faces, or better here, no as early as possible, in FemTools pre_checks
@@ -162,4 +163,21 @@ class FemInputWriter():
         # get the faces and face numbers
         for femobj in self.pressure_objects:  # femobj --> dict, FreeCAD document object is femobj['Object']
             prs_obj = femobj['Object']
-            femobj['PressureFaces'] = FemMeshTools.get_pressure_obj_faces_table(self.femmesh, prs_obj)
+            femobj['PressureFaces'] = FemMeshTools.get_pressure_obj_faces_std_search(self.femmesh, prs_obj)
+            print femobj['PressureFaces']
+
+    def get_constraints_pressure_faces_binary_search(self):
+        # see comment in get_constraints_pressure_faces_std_search
+
+        if not self.femnodes_mesh:
+            self.femnodes_mesh = self.femmesh.Nodes
+        if not self.femelement_table:
+            self.femelement_table = FemMeshTools.get_femelement_table(self.femmesh)
+        if not self.femnodes_ele_table:
+            self.femnodes_ele_table = FemMeshTools.get_femnodes_ele_table(self.femnodes_mesh, self.femelement_table)
+
+        for femobj in self.pressure_objects:  # femobj --> dict, FreeCAD document object is femobj['Object']
+            prs_obj = femobj['Object']
+            pressure_faces = FemMeshTools.get_pressure_obj_faces_binary_search(self.femmesh, self.femelement_table, self.femnodes_ele_table, prs_obj.References)
+            femobj['newPressureFaces'] = [(prs_obj.Name + ': face load', pressure_faces)]
+            print femobj['newPressureFaces']
