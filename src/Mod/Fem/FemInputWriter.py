@@ -153,3 +153,13 @@ class FemInputWriter():
                 femobj['NodeLoadTable'] = FemMeshTools.get_force_obj_edge_nodeload_table(self.femmesh, self.femelement_table, self.femnodes_mesh, frc_obj)
             elif femobj['RefShapeType'] == 'Face':  # area load on faces
                 femobj['NodeLoadTable'] = FemMeshTools.get_force_obj_face_nodeload_table(self.femmesh, self.femelement_table, self.femnodes_mesh, frc_obj)
+
+    def get_constraints_pressure_faces(self):
+        # in GUI defined prs_obj all ref_shape have to be faces!
+        # by python non faces Reference shapes could be added.
+        # TODO in FemTools: check if all RefShapes really are faces, or better here, no as early as possible, in FemTools pre_checks
+
+        # get the faces and face numbers
+        for femobj in self.pressure_objects:  # femobj --> dict, FreeCAD document object is femobj['Object']
+            prs_obj = femobj['Object']
+            femobj['PressureFaces'] = FemMeshTools.get_pressure_obj_faces_table(self.femmesh, prs_obj)

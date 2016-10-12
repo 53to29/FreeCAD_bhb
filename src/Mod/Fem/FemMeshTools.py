@@ -345,6 +345,17 @@ def get_force_obj_edge_nodeload_table(femmesh, femelement_table, femnodes_mesh, 
     return force_obj_node_load_table
 
 
+def get_pressure_obj_faces_table(femmesh, prs_obj):
+    pressure_data = []
+    for o, elem_tup in prs_obj.References:
+        for elem in elem_tup:
+            ref_shape = o.Shape.getElement(elem)
+            elem_info_string = 'face load on shape: ' + o.Name + ':' + elem
+            if ref_shape.ShapeType == 'Face':
+                pressure_data.append((elem_info_string, femmesh.getccxVolumesByFace(ref_shape)))
+    return pressure_data
+
+
 def get_force_obj_face_nodeload_table(femmesh, femelement_table, femnodes_mesh, frc_obj):
     # force_obj_node_load_table = [('refshape_name.elemname',node_load_table), ..., ('refshape_name.elemname',node_load_table)]
     force_obj_node_load_table = []
