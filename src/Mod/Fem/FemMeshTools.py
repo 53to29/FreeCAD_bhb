@@ -90,6 +90,33 @@ def get_femelement_table(femmesh):
     return femelement_table
 
 
+def get_femnodes_ele_table(femnodes_mesh, femelement_table):
+    '''{nodeID : [[eleID, lenEleNodes, NodePosition], [], ...], nodeID : [[], [], ...], ...}
+    '''
+    femnodes_ele_table = {}
+    for n in femnodes_mesh:  # initialize it with sorted node keys and empty lists
+        femnodes_ele_table[n] = []
+    for ele in femelement_table:
+        ele_list = femelement_table[ele]
+        # print ele_list
+        pos = int(1)
+        len_ele = len(ele_list)
+        for ele_node in ele_list:
+            femnodes_ele_table[ele_node].append([ele, len_ele, pos])
+            pos = pos << 1
+    # print 'femnodes_ele_table ', self.femnodes_ele_table
+    return femnodes_ele_table
+
+
+def get_copy_of_empty_femelement_table(femelement_table):
+    '''{eleID : 0, eleID : 0, ...}
+    '''
+    empty_femelement_table = {}
+    for ele in femelement_table:  # initialize it with sorted element keys and empty int
+        empty_femelement_table[ele] = 0
+    return empty_femelement_table.copy()
+
+
 def get_femelements_by_femnodes(femelement_table, node_list):
     '''for every femelement of femelement_table
     if all nodes of the femelement are in node_list,
